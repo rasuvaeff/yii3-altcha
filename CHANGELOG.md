@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.1.0 — 2026-11-20
 
 - Verifying a solution no longer repeats the key derivation: the challenge carries an HMAC of the derived key (made with a key derived from the secret), so verification is one HMAC. The posted counter is not compared any more — the proof is the derived key.
 - Fixed: replay protection was silently off when the verifier's clock ran ahead of the system time (negative marker lifetime). The verifier now checks expiry against its own clock too; a zero `expiresAt` is treated as "no expiry", like the library does.

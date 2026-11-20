@@ -9,6 +9,8 @@ use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\SimpleCache\CacheInterface;
+use Rasuvaeff\Understudy\Arg;
+use Rasuvaeff\Understudy\Understudy;
 use Rasuvaeff\Yii3Altcha\AltchaAlgorithm;
 use Rasuvaeff\Yii3Altcha\AltchaConfig;
 use Rasuvaeff\Yii3Altcha\AltchaRegistry;
@@ -27,6 +29,9 @@ use Testo\Test;
 use Yiisoft\Di\Container;
 use Yiisoft\Di\ContainerConfig;
 use Yiisoft\Test\Support\SimpleCache\MemorySimpleCache;
+use Yiisoft\Translator\TranslatorInterface;
+
+use function Rasuvaeff\Understudy\when;
 
 #[Test]
 #[CoversNothing]
@@ -111,31 +116,31 @@ final class ConfigWiringTest
 
     public function theBootstrapLooksForTheTranslatorOnlyWhenItIsAsked(): void
     {
-        $inner = $this->container($this->withSecret());
-        $asked = 0;
-        $container = new class ($inner, $asked) implements \Psr\Container\ContainerInterface {
-            public function __construct(private readonly \Psr\Container\ContainerInterface $inner, private int &$asked) {}
-
-            public function get(string $id): mixed
-            {
-                return $this->inner->get($id);
-            }
-
-            public function has(string $id): bool
-            {
-                $this->asked++;
-
-                return $this->inner->has($id);
-            }
-        };
+        $container = Understudy::for(ContainerInterface::class);
+        when(fn() => $container->has(TranslatorInterface::class))->returns(false);
 
         foreach ($this->bootstrap() as $step) {
             $step($container);
         }
 
-        Assert::same($asked, 0);
+        Understudy::verify(fn() => $container->has(Arg::any()), never: true);
         Assert::same(AltchaRegistry::translator(), null);
-        Assert::same($asked, 1);
+        Understudy::verify(fn() => $container->has(TranslatorInterface::class), times: 1);
+        Understudy::verify(fn() => $container->get(Arg::any()), never: true);
+    }
+
+    public function theBootstrapTakesTheTranslatorFromTheContainerWhenThereIsOne(): void
+    {
+        $translator = Understudy::for(TranslatorInterface::class);
+        $container = Understudy::for(ContainerInterface::class);
+        when(fn() => $container->has(TranslatorInterface::class))->returns(true);
+        when(fn() => $container->get(TranslatorInterface::class))->returns($translator);
+
+        foreach ($this->bootstrap() as $step) {
+            $step($container);
+        }
+
+        Assert::same(AltchaRegistry::translator(), $translator);
     }
 
     public function anInvalidAlgorithmParamFailsOnlyWhenTheConfigIsBuilt(): void

@@ -158,7 +158,7 @@ final class AltchaRuleHandlerTest
         $calls = 0;
         $translator = Understudy::for(TranslatorInterface::class);
         when(fn() => $translator->translate(Arg::any(), Arg::any(), 'yii3-altcha'))->returns('lazy');
-        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), static function () use (&$calls, $translator): TranslatorInterface {
+        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), translatorFactory: static function () use (&$calls, $translator): TranslatorInterface {
             $calls++;
 
             return $translator;
@@ -175,7 +175,7 @@ final class AltchaRuleHandlerTest
 
     public function aTranslatorFactoryMayFindNoTranslator(): void
     {
-        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), static fn(): ?TranslatorInterface => null);
+        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), translatorFactory: static fn(): ?TranslatorInterface => null);
 
         $result = (new AltchaRuleHandler())->validate('x', new AltchaRule(), new ValidationContext());
 
@@ -184,7 +184,7 @@ final class AltchaRuleHandlerTest
 
     public function reconfiguringDropsATranslatorFactoryThatHasNotRun(): void
     {
-        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), static fn(): TranslatorInterface => throw new \LogicException('factory must not run'));
+        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), translatorFactory: static fn(): TranslatorInterface => throw new \LogicException('factory must not run'));
         AltchaRegistry::configure(new AltchaVerifier(Browser::config()));
 
         Assert::same(AltchaRegistry::translator(), null);
@@ -195,9 +195,21 @@ final class AltchaRuleHandlerTest
         $first = Understudy::for(TranslatorInterface::class);
         $second = Understudy::for(TranslatorInterface::class);
         AltchaRegistry::configure(new AltchaVerifier(Browser::config()), $first);
-        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), static fn(): TranslatorInterface => $second);
+        AltchaRegistry::configure(new AltchaVerifier(Browser::config()), translatorFactory: static fn(): TranslatorInterface => $second);
 
         Assert::same(AltchaRegistry::translator(), $second);
+    }
+
+    public function aGivenTranslatorWinsOverAFactory(): void
+    {
+        $translator = Understudy::for(TranslatorInterface::class);
+        AltchaRegistry::configure(
+            new AltchaVerifier(Browser::config()),
+            $translator,
+            static fn(): TranslatorInterface => throw new \LogicException('factory must not run'),
+        );
+
+        Assert::same(AltchaRegistry::translator(), $translator);
     }
 
     public function theRuleIsNotRepeatableOnAProperty(): void

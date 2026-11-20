@@ -29,15 +29,18 @@ final class AltchaRegistry
 
     /**
      * @param AltchaVerifier|(Closure(): AltchaVerifier) $verifier the verifier, or a factory called on first use
-     * @param TranslatorInterface|(Closure(): ?TranslatorInterface)|null $translator the translator, or a factory
-     *                                                                               called on first use
+     * @param (Closure(): ?TranslatorInterface)|null $translatorFactory called on the first message to translate,
+     *                                                                  when no translator is given
      */
-    public static function configure(AltchaVerifier|Closure $verifier, TranslatorInterface|Closure|null $translator = null): void
-    {
+    public static function configure(
+        AltchaVerifier|Closure $verifier,
+        ?TranslatorInterface $translator = null,
+        ?Closure $translatorFactory = null,
+    ): void {
         self::$verifier = $verifier instanceof AltchaVerifier ? $verifier : null;
         self::$factory = $verifier instanceof Closure ? $verifier : null;
-        self::$translator = $translator instanceof TranslatorInterface ? $translator : null;
-        self::$translatorFactory = $translator instanceof TranslatorInterface ? null : $translator;
+        self::$translator = $translator;
+        self::$translatorFactory = $translator instanceof TranslatorInterface ? null : $translatorFactory;
     }
 
     public static function verifier(): ?AltchaVerifier

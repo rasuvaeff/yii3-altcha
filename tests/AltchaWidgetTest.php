@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Altcha\Tests;
 
 use Rasuvaeff\Yii3Altcha\AltchaWidget;
+use Rasuvaeff\Yii3Altcha\Tests\Support\Tag;
 use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Expect;
@@ -26,7 +27,7 @@ final class AltchaWidgetTest
     {
         $html = AltchaWidget::widget()->withChallengeUrl('/altcha/challenge')->render();
 
-        Assert::same($html, '<altcha-widget challenge="/altcha/challenge" name="altcha"></altcha-widget>');
+        Assert::same(Tag::attributes($html), ['challenge' => '/altcha/challenge', 'name' => 'altcha']);
     }
 
     public function theFieldNameIsConfigurable(): void
@@ -58,7 +59,7 @@ final class AltchaWidgetTest
     {
         $html = AltchaWidget::widget()->withChallengeUrl('/c')->withLanguage('ru')->render();
 
-        Assert::same($html, '<altcha-widget challenge="/c" name="altcha" language="ru"></altcha-widget>');
+        Assert::same(Tag::attributes($html), ['challenge' => '/c', 'language' => 'ru', 'name' => 'altcha']);
     }
 
     public function extraAttributesAreRendered(): void
@@ -68,7 +69,7 @@ final class AltchaWidgetTest
             ->withAttributes(['auto' => 'onsubmit', 'hidefooter' => true, 'debug' => false])
             ->render();
 
-        Assert::same($html, '<altcha-widget auto="onsubmit" hidefooter challenge="/c" name="altcha"></altcha-widget>');
+        Assert::same(Tag::attributes($html), ['auto' => 'onsubmit', 'challenge' => '/c', 'hidefooter' => true, 'name' => 'altcha']);
     }
 
     public function extraAttributesCannotOverrideTheChallengeUrlOrTheFieldName(): void
@@ -78,7 +79,7 @@ final class AltchaWidgetTest
             ->withAttributes(['challenge' => '/evil', 'name' => 'other'])
             ->render();
 
-        Assert::same($html, '<altcha-widget challenge="/c" name="altcha"></altcha-widget>');
+        Assert::same(Tag::attributes($html), ['challenge' => '/c', 'name' => 'altcha']);
     }
 
     public function languageAndAttributeWithersDoNotMutateTheOriginal(): void
@@ -87,7 +88,7 @@ final class AltchaWidgetTest
         $base->withLanguage('ru');
         $base->withAttributes(['auto' => 'onload']);
 
-        Assert::same($base->render(), '<altcha-widget challenge="/c" name="altcha"></altcha-widget>');
+        Assert::same(Tag::attributes($base->render()), ['challenge' => '/c', 'name' => 'altcha']);
     }
 
     public function theChallengeUrlIsEscaped(): void
@@ -95,6 +96,7 @@ final class AltchaWidgetTest
         $html = AltchaWidget::widget()->withChallengeUrl('/c?a=1&b="2"')->render();
 
         Assert::false(str_contains($html, 'b="2"'));
+        Assert::same(Tag::attributes($html)['challenge'], '/c?a=1&amp;b=&quot;2&quot;');
     }
 
     public function renderingWithoutAChallengeUrlFails(): void

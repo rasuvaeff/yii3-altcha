@@ -15,7 +15,7 @@ use Rasuvaeff\Yii3Altcha\AltchaAlgorithm;
 use Rasuvaeff\Yii3Altcha\AltchaVerifier;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
 use Rasuvaeff\Yii3Altcha\Tests\Support\Browser;
-use Rasuvaeff\Yii3Altcha\Tests\Support\FixedClock;
+use Rasuvaeff\Yii3Altcha\Tests\Support\Clock;
 use Rasuvaeff\Yii3Altcha\VerificationStatus;
 use Testo\Assert;
 use Testo\Codecov\Covers;
@@ -48,7 +48,7 @@ final class AltchaVerifierTest
 
     public function anExpiredChallengeIsRejectedEvenWhenSolved(): void
     {
-        $issuer = new ChallengeIssuer(Browser::config(ttlSeconds: 60), new FixedClock(time() - 3600));
+        $issuer = new ChallengeIssuer(Browser::config(ttlSeconds: 60), Clock::at(time() - 3600));
         $payload = Browser::solve($issuer->issue());
 
         Assert::same((new AltchaVerifier(Browser::config()))->verify($payload), VerificationStatus::Expired);
@@ -212,7 +212,7 @@ final class AltchaVerifierTest
             expiresAt: $now + 10.2,
         ))->toArray();
 
-        (new AltchaVerifier(Browser::config(), $cache, new FixedClock($now)))->verify(Browser::solve($challenge));
+        (new AltchaVerifier(Browser::config(), $cache, Clock::at($now)))->verify(Browser::solve($challenge));
 
         Assert::same($ttl->last(), 11 + AltchaVerifier::REPLAY_MARGIN_SECONDS);
     }
@@ -246,7 +246,7 @@ final class AltchaVerifierTest
         $now = time();
         $payload = Browser::solve((new ChallengeIssuer(Browser::config(ttlSeconds: 600)))->issue());
         // alive by the system time, which is all the library looks at; dead by the clock the marker is counted by
-        $verifier = new AltchaVerifier(Browser::config(), $cache, new FixedClock($now + 7200));
+        $verifier = new AltchaVerifier(Browser::config(), $cache, Clock::at($now + 7200));
 
         Assert::same($verifier->verify($payload), VerificationStatus::Expired);
         Understudy::verify(fn() => $cache->set(Arg::any(), Arg::any(), Arg::any()), never: true);
@@ -262,7 +262,7 @@ final class AltchaVerifierTest
         $challenge = $this->foreignChallenge(expiresAt: $now + 30);
 
         // the verifier's clock stands exactly on the expiry: not past it yet, the marker lives just the margin
-        $status = (new AltchaVerifier(Browser::config(), $cache, new FixedClock($now + 30)))->verify(Browser::solve($challenge));
+        $status = (new AltchaVerifier(Browser::config(), $cache, Clock::at($now + 30)))->verify(Browser::solve($challenge));
 
         Assert::same($status, VerificationStatus::Verified);
         Assert::same($ttl->last(), AltchaVerifier::REPLAY_MARGIN_SECONDS);
@@ -271,7 +271,7 @@ final class AltchaVerifierTest
     public function aClockBehindTheSystemKeepsTheReplayProtection(): void
     {
         $payload = Browser::solve((new ChallengeIssuer(Browser::config()))->issue());
-        $verifier = new AltchaVerifier(Browser::config(), new MemorySimpleCache(), new FixedClock(time() - 7200));
+        $verifier = new AltchaVerifier(Browser::config(), new MemorySimpleCache(), Clock::at(time() - 7200));
 
         Assert::same($verifier->verify($payload), VerificationStatus::Verified);
         Assert::same($verifier->verify($payload), VerificationStatus::Replayed);
@@ -347,7 +347,7 @@ final class AltchaVerifierTest
         $cache = Understudy::for(CacheInterface::class);
         when(fn() => $cache->has(Arg::any()))->returns(false);
         $verifier = new AltchaVerifier(Browser::config(), $cache);
-        $issuer = new ChallengeIssuer(Browser::config(ttlSeconds: 60), new FixedClock(time() - 3600));
+        $issuer = new ChallengeIssuer(Browser::config(ttlSeconds: 60), Clock::at(time() - 3600));
 
         Assert::same($verifier->verify(Browser::solve($issuer->issue())), VerificationStatus::Expired);
         Understudy::verify(fn() => $cache->set(Arg::any(), Arg::any(), Arg::any()), never: true);

@@ -7,7 +7,7 @@ namespace Rasuvaeff\Yii3Altcha\Tests;
 use Rasuvaeff\Yii3Altcha\AltchaConfig;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
 use Rasuvaeff\Yii3Altcha\Tests\Support\Browser;
-use Rasuvaeff\Yii3Altcha\Tests\Support\FixedClock;
+use Rasuvaeff\Yii3Altcha\Tests\Support\Clock;
 use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Test;
@@ -18,7 +18,7 @@ final class ChallengeIssuerTest
 {
     public function issuesASignedChallengeWithTheConfiguredParameters(): void
     {
-        $challenge = (new ChallengeIssuer(Browser::config(ttlSeconds: 120), new FixedClock(1_800_000_000)))->issue();
+        $challenge = (new ChallengeIssuer(Browser::config(ttlSeconds: 120), Clock::at(1_800_000_000)))->issue();
 
         Assert::same($challenge['parameters']['algorithm'], 'PBKDF2/SHA-256');
         Assert::same($challenge['parameters']['cost'], 10);

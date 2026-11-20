@@ -12,6 +12,7 @@ use Rasuvaeff\Yii3Altcha\AltchaRuleHandler;
 use Rasuvaeff\Yii3Altcha\AltchaVerifier;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
 use Rasuvaeff\Yii3Altcha\Tests\Support\Browser;
+use Rasuvaeff\Yii3Altcha\Tests\Support\RegistryReset;
 use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Data\DataProvider;
@@ -36,7 +37,7 @@ final class AltchaRuleHandlerTest
     #[AfterTest]
     public function resetRegistry(): void
     {
-        AltchaRegistry::reset();
+        RegistryReset::reset();
     }
 
     public function aSolvedPayloadPasses(): void
@@ -132,6 +133,42 @@ final class AltchaRuleHandlerTest
 
         Assert::true($handler->validate($payload, new AltchaRule(), new ValidationContext())->isValid());
         Assert::same($handler->validate('x', new AltchaRule(), new ValidationContext())->getErrorMessages(), ['from registry']);
+    }
+
+    public function aRegistryFactoryIsCalledOnlyOnFirstUseAndOnlyOnce(): void
+    {
+        $calls = 0;
+        AltchaRegistry::configure(static function () use (&$calls): AltchaVerifier {
+            $calls++;
+
+            return new AltchaVerifier(Browser::config());
+        });
+
+        Assert::same($calls, 0);
+
+        $handler = new AltchaRuleHandler();
+        $handler->validate('x', new AltchaRule(), new ValidationContext());
+        $handler->validate('y', new AltchaRule(), new ValidationContext());
+
+        Assert::same($calls, 1);
+    }
+
+    public function reconfiguringWithAnInstanceReplacesAFactory(): void
+    {
+        AltchaRegistry::configure(static fn(): AltchaVerifier => throw new \LogicException('factory must not run'));
+        $verifier = new AltchaVerifier(Browser::config());
+        AltchaRegistry::configure($verifier);
+
+        Assert::same(AltchaRegistry::verifier(), $verifier);
+    }
+
+    public function reconfiguringWithAFactoryForgetsTheInstance(): void
+    {
+        AltchaRegistry::configure(new AltchaVerifier(Browser::config()));
+        $fresh = new AltchaVerifier(Browser::config());
+        AltchaRegistry::configure(static fn(): AltchaVerifier => $fresh);
+
+        Assert::same(AltchaRegistry::verifier(), $fresh);
     }
 
     public function withoutAVerifierTheHandlerFailsLoudly(): void

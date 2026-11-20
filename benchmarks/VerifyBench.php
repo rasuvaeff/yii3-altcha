@@ -11,6 +11,7 @@ use AltchaOrg\Altcha\SolveChallengeOptions;
 use Rasuvaeff\Yii3Altcha\AltchaConfig;
 use Rasuvaeff\Yii3Altcha\AltchaVerifier;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
+use Rasuvaeff\Yii3Altcha\Internal\AlgorithmMap;
 use Rasuvaeff\Yii3Altcha\VerificationStatus;
 use Testo\Bench;
 
@@ -53,7 +54,7 @@ final class VerifyBench
             $config = self::config();
             $solution = (new Altcha())->solveChallenge(new SolveChallengeOptions(
                 challenge: $challenge,
-                algorithm: $config->algorithm->deriveKey(),
+                algorithm: AlgorithmMap::deriveKey($config->algorithm),
             ));
 
             self::$payload = (new Payload(challenge: $challenge, solution: $solution ?? throw new \RuntimeException('unsolved')))->toBase64();

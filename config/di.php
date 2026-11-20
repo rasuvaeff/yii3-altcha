@@ -17,16 +17,13 @@ use Yiisoft\Translator\SimpleMessageFormatter;
 /** @var array $params */
 
 return [
-    AltchaConfig::class => [
-        'class' => AltchaConfig::class,
-        '__construct()' => [
-            'secret' => $params['rasuvaeff/yii3-altcha']['secret'],
-            'algorithm' => AltchaAlgorithm::from($params['rasuvaeff/yii3-altcha']['algorithm']),
-            'cost' => $params['rasuvaeff/yii3-altcha']['cost'],
-            'maxCounter' => $params['rasuvaeff/yii3-altcha']['maxCounter'],
-            'ttlSeconds' => $params['rasuvaeff/yii3-altcha']['ttlSeconds'],
-        ],
-    ],
+    AltchaConfig::class => static fn(): AltchaConfig => new AltchaConfig(
+        secret: $params['rasuvaeff/yii3-altcha']['secret'],
+        algorithm: AltchaAlgorithm::from($params['rasuvaeff/yii3-altcha']['algorithm']),
+        cost: $params['rasuvaeff/yii3-altcha']['cost'],
+        maxCounter: $params['rasuvaeff/yii3-altcha']['maxCounter'],
+        ttlSeconds: $params['rasuvaeff/yii3-altcha']['ttlSeconds'],
+    ),
     AltchaVerifier::class => static fn(ContainerInterface $container): AltchaVerifier => new AltchaVerifier(
         config: $container->get(AltchaConfig::class),
         replayCache: $params['rasuvaeff/yii3-altcha']['replayProtection']

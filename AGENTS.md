@@ -10,9 +10,13 @@ verifies the payload locally — no outgoing HTTP. Form glue: `AltchaRule` + `Al
 `yiisoft/validator`, `AltchaWidget` for the `<altcha-widget>` tag, `AltchaRegistry` as the static holder the
 no-argument rule handler reads (the default `yiisoft/validator` resolver builds handlers with `new`).
 
-All cryptography belongs to the official `altcha-org/altcha`. Only two classes may touch it — `ChallengeIssuer` and
-`AltchaVerifier` (plus the `AltchaAlgorithm` enum that maps to its algorithm objects) — so a major bump of the
+All cryptography belongs to the official `altcha-org/altcha`. Only `ChallengeIssuer`, `AltchaVerifier` and the
+`@internal` `Internal\AlgorithmMap` may touch it, and no library type appears in a public signature, so a bump of the
 library stays local. Do not reimplement the protocol.
+
+The library ships breaking changes needed to match its JS twin in **minor** releases (its own CHANGELOG says so;
+the canonical JSON of the signature already changed within 2.x). Keep the constraint on one minor (`~2.4.0`) and
+raise it by hand after reading the library CHANGELOG and running the full suite.
 
 ## Golden rules
 
@@ -54,11 +58,18 @@ make release-check
 
 ## Invariants & gotchas
 
-- `AltchaConfig` bounds everything the server pays for: secret >= 32 bytes, `cost` <= 1 000 000 (verification repeats
-  one derivation), positive `ttlSeconds`/`maxCounter`. Keep new settings validated in the constructor.
+- `AltchaConfig` bounds everything the server pays for: secret >= 32 bytes, `cost` <= 100 000 (issuing and verifying
+  each run one derivation on public endpoints), positive `ttlSeconds`/`maxCounter`. Keep new settings validated in the constructor.
 - The challenge counter must be passed to `createChallenge()`: without it the library picks a random prefix nobody can
   solve. `ChallengeIssuer` draws it from `[1, maxCounter]`.
-- Replay protection uses PSR-16 (no atomic add): document the tiny race, do not claim exactly-once.
+- Replay protection uses PSR-16 (no atomic add): document the tiny race, do not claim exactly-once. A challenge is
+  spent by its first signature-valid attempt (also a wrong solution), so one challenge costs at most one derivation;
+  the marker lives until `expiresAt` + `REPLAY_MARGIN_SECONDS`, never the current config TTL. A refused write throws.
+- The verification algorithm comes from the signed challenge (`AltchaAlgorithm::tryFrom`), never from the config.
+- `config/bootstrap.php` registers a lazy factory in `AltchaRegistry`: never resolve the verifier eagerly there, or
+  an app without secret/cache stops booting (console included).
+- `AltchaWidget` targets the v3 widget (`challenge` attribute). Compatibility of a concrete widget version with the
+  PHP library's challenge format has to be checked in a real browser before the README names one.
 - `config/di.php` builds `AltchaVerifier` with the container's `CacheInterface` only when `replayProtection` is on;
   a missing cache then fails loudly. Run `bin/config-merge-harness yii3-altcha` from the monorepo root after any
   change to `config/`.

@@ -7,6 +7,7 @@ namespace Rasuvaeff\Yii3Altcha;
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\CreateChallengeOptions;
 use Psr\Clock\ClockInterface;
+use Rasuvaeff\Yii3Altcha\Internal\AlgorithmMap;
 
 /**
  * Issues signed, expiring challenges. One of the two classes that touch the official library.
@@ -34,7 +35,7 @@ final readonly class ChallengeIssuer
         $now = $this->clock instanceof ClockInterface ? $this->clock->now()->getTimestamp() : time();
 
         return $this->altcha->createChallenge(new CreateChallengeOptions(
-            algorithm: $this->config->algorithm->deriveKey(),
+            algorithm: AlgorithmMap::deriveKey($this->config->algorithm),
             cost: $this->config->cost,
             counter: random_int(1, $this->config->maxCounter),
             expiresAt: $now + $this->config->ttlSeconds,

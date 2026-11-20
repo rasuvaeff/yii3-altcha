@@ -17,6 +17,7 @@ use Rasuvaeff\Yii3Altcha\AltchaVerifier;
 use Rasuvaeff\Yii3Altcha\ChallengeAction;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
 use Rasuvaeff\Yii3Altcha\Tests\Support\Browser;
+use Rasuvaeff\Yii3Altcha\Tests\Support\RegistryReset;
 use Rasuvaeff\Yii3Altcha\VerificationStatus;
 use Testo\Assert;
 use Testo\Codecov\CoversNothing;
@@ -34,7 +35,7 @@ final class ConfigWiringTest
     #[AfterTest]
     public function resetRegistry(): void
     {
-        AltchaRegistry::reset();
+        RegistryReset::reset();
     }
 
     public function paramsAreSafeByDefault(): void
@@ -93,6 +94,30 @@ final class ConfigWiringTest
         Expect::exception(\Throwable::class);
 
         $this->container($this->withSecret(), withCache: false)->get(AltchaVerifier::class);
+    }
+
+    public function theBootstrapDoesNotBuildTheVerifierSoAnUnconfiguredAppStillBoots(): void
+    {
+        $container = $this->container(withCache: false);
+
+        foreach ($this->bootstrap() as $step) {
+            $step($container);
+        }
+
+        Expect::exception(\Throwable::class);
+
+        AltchaRegistry::verifier();
+    }
+
+    public function anInvalidAlgorithmParamFailsOnlyWhenTheConfigIsBuilt(): void
+    {
+        $params = $this->withSecret();
+        $params['rasuvaeff/yii3-altcha']['algorithm'] = 'MD5';
+        $container = $this->container($params);
+
+        Expect::exception(\Throwable::class);
+
+        $container->get(AltchaConfig::class);
     }
 
     public function theBootstrapFeedsTheRegistry(): void

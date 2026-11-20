@@ -17,20 +17,24 @@ composer require rasuvaeff/yii3-altcha
 - Challenges always expire (`ttlSeconds`); unsigned challenges never verify (fail-closed)
 - `verify()` never throws on hostile input: anything undecodable is `VerificationStatus::Malformed`; payloads over 8192 bytes are `Malformed` before decoding
 - Replay protection (default on) needs a `Psr\SimpleCache\CacheInterface` in the container; without it set `replayProtection => false`
-- `AltchaRule` handlers are built without arguments by yiisoft/validator: they read the verifier from `AltchaRegistry`, filled by `config/bootstrap.php`
+- With replay protection a challenge is spent by its first attempt with a valid signature (verified or wrong solution): retries of the same challenge are `Replayed`; a cache that refuses the write throws `RuntimeException`
+- The algorithm, cost and expiry come from the signed challenge, not from the config at verify time
+- Issuing and verifying each cost one key derivation on public endpoints: rate-limit the challenge route and the form
+- The widget tag targets the v3 widget (`challenge` attribute, not v2's `challengeurl`)
+- `AltchaRule` handlers are built without arguments by yiisoft/validator: they read the verifier from `AltchaRegistry`; `config/bootstrap.php` registers a lazy factory, so an app without secret/cache still boots
 - Proof-of-work raises the cost of automation, it is not proof of a human: combine with rate limiting
 
 ## API
 
 Params (`config/params.php`, key `rasuvaeff/yii3-altcha`): `secret`, `algorithm` (`PBKDF2/SHA-256` default; also `PBKDF2/SHA-384|512`, `SHA-256|384|512`),
-`cost` (5000, max 1000000), `maxCounter` (1000), `ttlSeconds` (600), `replayProtection` (true), `translation.category`.
+`cost` (5000, max 100000), `maxCounter` (1000), `ttlSeconds` (600), `replayProtection` (true), `translation.category`.
 
 ```php
 use Rasuvaeff\Yii3Altcha\{AltchaConfig, AltchaVerifier, ChallengeIssuer, VerificationStatus};
 
 $config = new AltchaConfig(secret: $env['ALTCHA_SECRET']);           // >= 32 bytes
 $challenge = (new ChallengeIssuer($config))->issue();                 // array: parameters + signature, for the widget
-$verifier = new AltchaVerifier($config, replayCache: $psr16Cache);    // cache optional
+$verifier = new AltchaVerifier($config, replayCache: $psr16Cache);    // cache and clock optional
 $status = $verifier->verify($_POST['altcha'] ?? '');                  // VerificationStatus
 $status->isVerified();                                                // true only for Verified
 // other cases: Expired, InvalidSignature, InvalidSolution, Replayed, Malformed (->value is snake_case)
@@ -44,7 +48,9 @@ Route::get('/altcha/challenge')->action(Rasuvaeff\Yii3Altcha\ChallengeAction::cl
 echo Rasuvaeff\Yii3Altcha\AltchaWidget::widget()
     ->withChallengeUrl('/altcha/challenge')
     ->withFieldName('altcha')   // default
-    ->render();                 // <altcha-widget challengeurl="/altcha/challenge" name="altcha"></altcha-widget>
+    ->withLanguage('ru')        // optional; load the widget's i18n file
+    ->withAttributes(['auto' => 'onsubmit'])  // optional; `challenge` and `name` always win
+    ->render();                 // <altcha-widget auto="onsubmit" challenge="/altcha/challenge" name="altcha" language="ru"></altcha-widget>
 
 // Validation (yiisoft/validator)
 final class RegisterForm

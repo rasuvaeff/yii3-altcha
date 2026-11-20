@@ -10,6 +10,7 @@ use AltchaOrg\Altcha\Payload;
 use AltchaOrg\Altcha\SolveChallengeOptions;
 use Rasuvaeff\Yii3Altcha\AltchaAlgorithm;
 use Rasuvaeff\Yii3Altcha\AltchaConfig;
+use Rasuvaeff\Yii3Altcha\Internal\AlgorithmMap;
 
 /**
  * Plays the part of the widget: solves a challenge and returns the base64 payload it would post.
@@ -34,7 +35,7 @@ final class Browser
         $parsed = Challenge::fromArray($challenge);
         $solution = (new Altcha())->solveChallenge(new SolveChallengeOptions(
             challenge: $parsed,
-            algorithm: $algorithm->deriveKey(),
+            algorithm: AlgorithmMap::deriveKey($algorithm),
             timeout: 30.0,
         ));
 

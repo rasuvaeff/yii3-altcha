@@ -26,7 +26,7 @@ final class AltchaWidgetTest
     {
         $html = AltchaWidget::widget()->withChallengeUrl('/altcha/challenge')->render();
 
-        Assert::same($html, '<altcha-widget challengeurl="/altcha/challenge" name="altcha"></altcha-widget>');
+        Assert::same($html, '<altcha-widget challenge="/altcha/challenge" name="altcha"></altcha-widget>');
     }
 
     public function theFieldNameIsConfigurable(): void
@@ -52,6 +52,42 @@ final class AltchaWidgetTest
         Expect::exception(\RuntimeException::class)->withMessage('challengeUrl is required');
 
         $base->render();
+    }
+
+    public function theLanguageIsRenderedWhenSet(): void
+    {
+        $html = AltchaWidget::widget()->withChallengeUrl('/c')->withLanguage('ru')->render();
+
+        Assert::same($html, '<altcha-widget challenge="/c" name="altcha" language="ru"></altcha-widget>');
+    }
+
+    public function extraAttributesAreRendered(): void
+    {
+        $html = AltchaWidget::widget()
+            ->withChallengeUrl('/c')
+            ->withAttributes(['auto' => 'onsubmit', 'hidefooter' => true, 'debug' => false])
+            ->render();
+
+        Assert::same($html, '<altcha-widget auto="onsubmit" hidefooter challenge="/c" name="altcha"></altcha-widget>');
+    }
+
+    public function extraAttributesCannotOverrideTheChallengeUrlOrTheFieldName(): void
+    {
+        $html = AltchaWidget::widget()
+            ->withChallengeUrl('/c')
+            ->withAttributes(['challenge' => '/evil', 'name' => 'other'])
+            ->render();
+
+        Assert::same($html, '<altcha-widget challenge="/c" name="altcha"></altcha-widget>');
+    }
+
+    public function languageAndAttributeWithersDoNotMutateTheOriginal(): void
+    {
+        $base = AltchaWidget::widget()->withChallengeUrl('/c');
+        $base->withLanguage('ru');
+        $base->withAttributes(['auto' => 'onload']);
+
+        Assert::same($base->render(), '<altcha-widget challenge="/c" name="altcha"></altcha-widget>');
     }
 
     public function theChallengeUrlIsEscaped(): void

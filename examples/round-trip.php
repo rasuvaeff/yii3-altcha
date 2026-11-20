@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
 
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\Challenge;
 use AltchaOrg\Altcha\Payload;
@@ -24,7 +25,7 @@ echo "challenge: algorithm={$challenge['parameters']['algorithm']} cost={$challe
 $parsed = Challenge::fromArray($challenge);
 $solution = (new Altcha())->solveChallenge(new SolveChallengeOptions(
     challenge: $parsed,
-    algorithm: $config->algorithm->deriveKey(),
+    algorithm: new Pbkdf2(),   // PBKDF2/SHA-256, the configured default
 ));
 $payload = (new Payload(challenge: $parsed, solution: $solution ?? throw new RuntimeException('unsolved')))->toBase64();
 

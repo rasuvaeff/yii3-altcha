@@ -43,7 +43,7 @@ final class AltchaConfigTest
     public function theCostCeilingAndFloorAreLegal(): void
     {
         Assert::same((new AltchaConfig(secret: Browser::SECRET, cost: 1))->cost, 1);
-        Assert::same((new AltchaConfig(secret: Browser::SECRET, cost: 1_000_000))->cost, 1_000_000);
+        Assert::same((new AltchaConfig(secret: Browser::SECRET, cost: 100_000))->cost, 100_000);
     }
 
     #[DataProvider('invalidProvider')]
@@ -58,8 +58,8 @@ final class AltchaConfigTest
     {
         yield 'empty secret' => ['', 5000, 1000, 600, 'The ALTCHA secret must be at least 32 bytes'];
         yield 'short secret' => [str_repeat('s', 31), 5000, 1000, 600, 'The ALTCHA secret must be at least 32 bytes'];
-        yield 'zero cost' => [Browser::SECRET, 0, 1000, 600, 'The ALTCHA cost must be between 1 and 1000000'];
-        yield 'huge cost' => [Browser::SECRET, 1_000_001, 1000, 600, 'The ALTCHA cost must be between 1 and 1000000'];
+        yield 'zero cost' => [Browser::SECRET, 0, 1000, 600, 'The ALTCHA cost must be between 1 and 100000'];
+        yield 'huge cost' => [Browser::SECRET, 100_001, 1000, 600, 'The ALTCHA cost must be between 1 and 100000'];
         yield 'zero counter' => [Browser::SECRET, 5000, 0, 600, 'The ALTCHA max counter must be positive'];
         yield 'zero ttl' => [Browser::SECRET, 5000, 1000, 0, 'The ALTCHA challenge TTL must be positive'];
     }

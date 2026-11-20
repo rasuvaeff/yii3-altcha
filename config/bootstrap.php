@@ -10,7 +10,7 @@ use Yiisoft\Translator\TranslatorInterface;
 return [
     static function (ContainerInterface $container): void {
         AltchaRegistry::configure(
-            verifier: $container->get(AltchaVerifier::class),
+            verifier: static fn(): AltchaVerifier => $container->get(AltchaVerifier::class),
             translator: $container->has(TranslatorInterface::class)
                 ? $container->get(TranslatorInterface::class)
                 : null,

@@ -57,10 +57,10 @@ return [
 |---|---|---|
 | `secret` | `''` (must be set) | HMAC secret signing every challenge, at least 32 bytes. An unset secret fails the container loudly |
 | `algorithm` | `PBKDF2/SHA-256` | `PBKDF2/SHA-256\|384\|512` or `SHA-256\|384\|512` — the algorithms the browser widget solves natively |
-| `cost` | `5000` | Key-derivation iterations per attempt; verification repeats it once, so it is capped at 1 000 000 |
+| `cost` | `5000` | Key-derivation iterations per attempt; issuing and verifying each cost the server one derivation, so it is capped at 100 000 |
 | `maxCounter` | `1000` | Upper bound of the secret counter the browser searches; the average solve is half of it |
 | `ttlSeconds` | `600` | Lifetime of a challenge, hence of a solved payload |
-| `replayProtection` | `true` | Accept a solved payload only once (needs a PSR-16 cache in the container) |
+| `replayProtection` | `true` | Spend a challenge on its first attempt with a valid signature (needs a PSR-16 cache in the container) |
 | `translation.category` | `yii3-altcha` | Translator category of the rule message |
 
 Difficulty is `cost × maxCounter / 2` iterations in the browser, on average. The defaults aim at roughly a second on a
@@ -77,10 +77,14 @@ use Yiisoft\Router\Route;
 Route::get('/altcha/challenge')->action(ChallengeAction::class);
 ```
 
+Every challenge costs the server one key derivation (about 3 ms at the default cost), and the route is public:
+put a rate limiter in front of it.
+
 ### Widget
 
-`AltchaWidget` renders the `<altcha-widget>` tag. The widget script itself (the `altcha` web component) is loaded by
-your application — pin a concrete version rather than `latest`:
+`AltchaWidget` renders the `<altcha-widget>` tag of the v3 widget (npm `altcha` 3.x), which takes the challenge URL in
+its `challenge` attribute (v2 widgets used `challengeurl`). The widget script itself is loaded by your application —
+pin a concrete version rather than `latest`:
 
 ```php
 use Rasuvaeff\Yii3Altcha\AltchaWidget;
@@ -88,6 +92,8 @@ use Rasuvaeff\Yii3Altcha\AltchaWidget;
 echo AltchaWidget::widget()
     ->withChallengeUrl('/altcha/challenge')
     ->withFieldName('altcha')   // the name of the posted form field, `altcha` by default
+    ->withLanguage('ru')        // widget strings; load the matching `altcha/i18n/ru` file
+    ->withAttributes(['auto' => 'onsubmit'])   // any other widget attribute
     ->render();
 ```
 
@@ -108,7 +114,8 @@ final class RegisterForm
 ```
 
 Rule handlers are built without arguments by the default `yiisoft/validator` resolver, so the handler reads the
-verifier from `AltchaRegistry`, which the package bootstrap fills once at application start.
+verifier from `AltchaRegistry`. The package bootstrap registers a factory there, so the verifier is built on the first
+verification: an application without a secret or a cache still boots, and fails only when a form checks a CAPTCHA.
 
 ### Verifying directly
 
@@ -123,7 +130,8 @@ if ($status !== VerificationStatus::Verified) {
 }
 ```
 
-`verify()` never throws on hostile input — whatever cannot be decoded is `Malformed`.
+`verify()` never throws on hostile input — whatever cannot be decoded is `Malformed`. Replay-cache errors do
+propagate, including a cache that refuses the write.
 
 ### Public API
 
@@ -133,11 +141,11 @@ if ($status !== VerificationStatus::Verified) {
 | `AltchaAlgorithm` | Enum of the algorithms the widget can solve |
 | `ChallengeIssuer` | Issues a signed, expiring challenge as the array the widget expects |
 | `ChallengeAction` | PSR-15 handler serving a challenge as JSON |
-| `AltchaVerifier` | Verifies a posted payload locally, optional one-time-use replay cache |
+| `AltchaVerifier` | Verifies a posted payload locally; optional replay cache spending each challenge on first use |
 | `VerificationStatus` | `Verified`, `Expired`, `InvalidSignature`, `InvalidSolution`, `Replayed`, `Malformed` |
 | `AltchaRule` / `AltchaRuleHandler` | `yiisoft/validator` rule |
-| `AltchaRegistry` | Static holder of the verifier and translator for the rule handler |
-| `AltchaWidget` | Renders the `<altcha-widget>` tag |
+| `AltchaRegistry` | Static holder of the verifier (or its lazy factory) and translator for the rule handler |
+| `AltchaWidget` | Renders the `<altcha-widget>` tag (v3 widget: `challenge`, `name`, `language`, extra attributes) |
 
 ## Security
 
@@ -146,14 +154,20 @@ if ($status !== VerificationStatus::Verified) {
 - **The secret signs every challenge.** Without a signature secret nothing can verify (fail-closed). Keep it in the
   environment, at least 32 bytes; rotating it invalidates outstanding challenges.
 - **Challenges always expire.** There is no switch to disable expiry; the replay window is `ttlSeconds`.
-- **Replay protection** (on by default) makes a solved payload single-use through a PSR-16 cache. PSR-16 has no atomic
-  add, so two simultaneous submissions of the same payload can both pass in a tiny window; use a shared cache
-  (Redis) if several workers serve the form. Switching it off makes one solve good for every submission until
-  expiry.
+- **Replay protection** (on by default) spends a challenge through a PSR-16 cache on its first attempt with a valid
+  signature: a solved payload is accepted once, and a wrong solution cannot be retried against the same challenge,
+  so one challenge costs the server at most one key derivation. The marker lives until the challenge expires plus 60 s
+  of clock-skew margin. PSR-16 has no atomic add, so two simultaneous submissions of the same payload can both pass in
+  a tiny window; use a shared cache (Redis) if several workers serve the form. A cache that refuses the write raises
+  an exception instead of silently dropping the protection. Switching it off makes one solve good for every
+  submission until expiry.
+- **Both endpoints cost CPU.** Issuing a challenge and checking a solution each run one key derivation (about 3 ms at
+  the default cost, the reason `cost` is capped at 100 000). Rate-limit the challenge route and the form.
 - **Hostile input is bounded.** Payloads over 8 KiB are rejected before decoding; the signature is checked before any
   key derivation, so a forged `cost` cannot burn server CPU.
-- The signed parameters — algorithm, cost, expiry — come from the challenge, not from your config at verify time;
-  tightening the config affects new challenges only.
+- The signed parameters — algorithm, cost, expiry — come from the challenge, not from your config at verify time:
+  changing the config affects new challenges only and never invalidates outstanding ones. Expiry is checked against
+  the system time.
 
 ## Examples
 

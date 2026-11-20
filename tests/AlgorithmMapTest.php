@@ -7,6 +7,7 @@ namespace Rasuvaeff\Yii3Altcha\Tests;
 use Rasuvaeff\Yii3Altcha\AltchaAlgorithm;
 use Rasuvaeff\Yii3Altcha\AltchaVerifier;
 use Rasuvaeff\Yii3Altcha\ChallengeIssuer;
+use Rasuvaeff\Yii3Altcha\Internal\AlgorithmMap;
 use Rasuvaeff\Yii3Altcha\Tests\Support\Browser;
 use Rasuvaeff\Yii3Altcha\VerificationStatus;
 use Testo\Assert;
@@ -15,13 +16,13 @@ use Testo\Data\DataProvider;
 use Testo\Test;
 
 #[Test]
-#[Covers(AltchaAlgorithm::class)]
-final class AltchaAlgorithmTest
+#[Covers(AlgorithmMap::class)]
+final class AlgorithmMapTest
 {
     #[DataProvider('algorithmProvider')]
-    public function deriveKeyReportsTheProtocolName(AltchaAlgorithm $algorithm): void
+    public function theLibraryAlgorithmReportsTheProtocolName(AltchaAlgorithm $algorithm): void
     {
-        Assert::same($algorithm->deriveKey()->getAlgorithmName(), $algorithm->value);
+        Assert::same(AlgorithmMap::deriveKey($algorithm)->getAlgorithmName(), $algorithm->value);
     }
 
     #[DataProvider('algorithmProvider')]

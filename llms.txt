@@ -12,16 +12,20 @@ composer require rasuvaeff/yii3-altcha
 ## Rules
 
 - PHP 8.3+, `declare(strict_types=1)`; immutable by default (`final readonly class`)
-- The official library owns all cryptography; only `ChallengeIssuer` and `AltchaVerifier` touch it
+- The official library owns all cryptography; only `ChallengeIssuer`, `AltchaVerifier` and `Internal\*` touch it
 - `secret` is mandatory, at least 32 bytes, from the environment; an unset secret fails the container
 - Challenges always expire (`ttlSeconds`); unsigned challenges never verify (fail-closed)
 - `verify()` never throws on hostile input: anything undecodable is `VerificationStatus::Malformed`; payloads over 8192 bytes are `Malformed` before decoding
 - Replay protection (default on) needs a `Psr\SimpleCache\CacheInterface` in the container; without it set `replayProtection => false`
 - With replay protection a challenge is spent by its first attempt with a valid signature (verified or wrong solution): retries of the same challenge are `Replayed`; a cache that refuses the write throws `RuntimeException`
 - The algorithm, cost and expiry come from the signed challenge, not from the config at verify time
-- Issuing and verifying each cost one key derivation on public endpoints: rate-limit the challenge route and the form
-- The widget tag targets the v3 widget (`challenge` attribute, not v2's `challengeurl`)
-- `AltchaRule` handlers are built without arguments by yiisoft/validator: they read the verifier from `AltchaRegistry`; `config/bootstrap.php` registers a lazy factory, so an app without secret/cache still boots
+- Issuing a challenge costs one key derivation on a public endpoint: rate-limit the challenge route. Verifying costs one HMAC: the challenge carries a signature of the derived key, the posted counter is not compared
+- Expiry is checked against the system time and against the optional PSR-20 clock of `AltchaVerifier`; a challenge must be alive by both
+- The first check spends the challenge: validate a form once per request, one `AltchaRule` per property; a failed submit needs a new challenge
+- The replay cache key is 64 characters (`yii3-altcha.` + 52 hex)
+- The bundled Russian message needs `yiisoft/translator-message-php`; without it the message stays English
+- The widget tag targets the v3 widget (`challenge` attribute, not v2's `challengeurl`); checked in Chrome with npm `altcha` 3.7.0
+- `AltchaRule` handlers are built without arguments by yiisoft/validator: they read the verifier from `AltchaRegistry`; `config/bootstrap.php` registers lazy factories for the verifier and the translator, so an app without secret/cache still boots
 - Proof-of-work raises the cost of automation, it is not proof of a human: combine with rate limiting
 
 ## API

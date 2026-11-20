@@ -94,13 +94,43 @@ final class AltchaVerifierTest
         Assert::same($status, VerificationStatus::InvalidSolution);
     }
 
-    public function aWrongCounterIsAnInvalidSolution(): void
+    public function theProofIsTheDerivedKeySoThePostedCounterIsNotCompared(): void
     {
         $challenge = (new ChallengeIssuer(Browser::config()))->issue();
         $solution = Browser::solution($challenge);
         $solution['counter'] += 1;
 
+        // re-deriving the key for this counter would not match: the verdict comes from the key signature alone
         $status = (new AltchaVerifier(Browser::config()))->verify(Browser::encode($challenge, $solution));
+
+        Assert::same($status, VerificationStatus::Verified);
+    }
+
+    public function aChallengeWithoutAKeySignatureIsCheckedByRepeatingTheDerivation(): void
+    {
+        $challenge = $this->foreignChallenge(expiresAt: time() + 60);
+        $solution = Browser::solution($challenge);
+        $broken = $solution;
+        $broken['counter'] += 1;
+        $verifier = new AltchaVerifier(Browser::config());
+
+        Assert::false(isset($challenge['parameters']['keySignature']));
+        Assert::same($verifier->verify(Browser::encode($challenge, $solution)), VerificationStatus::Verified);
+        Assert::same($verifier->verify(Browser::encode($challenge, $broken)), VerificationStatus::InvalidSolution);
+    }
+
+    public function aWrongKeySignatureIsAnInvalidSolutionEvenWithTheRightKey(): void
+    {
+        // signed by our secret, but the key signature was made with a key that is not ours
+        $altcha = new \AltchaOrg\Altcha\Altcha(hmacSignatureSecret: Browser::SECRET, hmacKeySignatureSecret: Browser::SECRET);
+        $challenge = $altcha->createChallenge(new \AltchaOrg\Altcha\CreateChallengeOptions(
+            algorithm: new \AltchaOrg\Altcha\Algorithm\Pbkdf2(),
+            cost: 10,
+            counter: 3,
+            expiresAt: time() + 60,
+        ))->toArray();
+
+        $status = (new AltchaVerifier(Browser::config()))->verify(Browser::solve($challenge));
 
         Assert::same($status, VerificationStatus::InvalidSolution);
     }
@@ -151,10 +181,16 @@ final class AltchaVerifierTest
         // the verifier's config says 5 s, the challenge says ~321 s: the challenge wins
         $verifier = new AltchaVerifier(Browser::config(ttlSeconds: 5), $cache);
 
-        $verifier->verify(Browser::solve((new ChallengeIssuer(Browser::config(ttlSeconds: 321)))->issue()));
+        $challenge = (new ChallengeIssuer(Browser::config(ttlSeconds: 321)))->issue();
+        $verifier->verify(Browser::solve($challenge));
 
-        Assert::true(str_starts_with($key->last(), 'yii3-altcha.used.'));
-        Assert::same(\strlen($key->last()), \strlen('yii3-altcha.used.') + 64);
+        Assert::same($key->last(), 'yii3-altcha.' . substr(hash('sha256', (string) $challenge['signature']), offset: 0, length: 52));
+
+        Assert::true(str_starts_with($key->last(), AltchaVerifier::REPLAY_KEY_PREFIX));
+        Assert::same(AltchaVerifier::REPLAY_KEY_PREFIX, 'yii3-altcha.');
+        // PSR-16 guarantees keys of up to 64 characters, and none of `{}()/\@:`
+        Assert::same(\strlen($key->last()), 64);
+        Assert::same(preg_match('/\A[a-z0-9.-]+\z/', $key->last()), 1);
         Assert::same($value->last(), expected: true);
         Assert::true($ttl->last() >= 321 - 2 + AltchaVerifier::REPLAY_MARGIN_SECONDS);
         Assert::true($ttl->last() <= 321 + AltchaVerifier::REPLAY_MARGIN_SECONDS);
@@ -181,22 +217,64 @@ final class AltchaVerifierTest
         Assert::same($ttl->last(), 11 + AltchaVerifier::REPLAY_MARGIN_SECONDS);
     }
 
-    public function aChallengeWithoutExpiryFallsBackToTheConfiguredLifetime(): void
+    #[DataProvider('noExpiryProvider')]
+    public function aChallengeWithoutExpiryFallsBackToTheConfiguredLifetime(int|float|null $expiresAt): void
     {
         $cache = Understudy::for(CacheInterface::class);
         $ttl = Arg::captor();
         when(fn() => $cache->has(Arg::any()))->returns(false);
         when(fn() => $cache->set(Arg::any(), Arg::any(), $ttl->capture()))->returns(true);
-        $altcha = new \AltchaOrg\Altcha\Altcha(hmacSignatureSecret: Browser::SECRET);
-        $challenge = $altcha->createChallenge(new \AltchaOrg\Altcha\CreateChallengeOptions(
-            algorithm: new \AltchaOrg\Altcha\Algorithm\Pbkdf2(),
-            cost: 10,
-            counter: 3,
-        ))->toArray();
+        $verifier = new AltchaVerifier(Browser::config(ttlSeconds: 77), $cache);
 
-        (new AltchaVerifier(Browser::config(ttlSeconds: 77), $cache))->verify(Browser::solve($challenge));
+        $status = $verifier->verify(Browser::solve($this->foreignChallenge($expiresAt)));
 
+        Assert::same($status, VerificationStatus::Verified);
         Assert::same($ttl->last(), 77 + AltchaVerifier::REPLAY_MARGIN_SECONDS);
+    }
+
+    public static function noExpiryProvider(): iterable
+    {
+        yield 'absent' => [null];
+        yield 'zero' => [0];
+        yield 'float zero' => [0.0];
+    }
+
+    public function aChallengeDeadByTheVerifiersClockIsExpiredAndNotSpent(): void
+    {
+        $cache = Understudy::for(CacheInterface::class);
+        when(fn() => $cache->has(Arg::any()))->returns(false);
+        $now = time();
+        $payload = Browser::solve((new ChallengeIssuer(Browser::config(ttlSeconds: 600)))->issue());
+        // alive by the system time, which is all the library looks at; dead by the clock the marker is counted by
+        $verifier = new AltchaVerifier(Browser::config(), $cache, new FixedClock($now + 7200));
+
+        Assert::same($verifier->verify($payload), VerificationStatus::Expired);
+        Understudy::verify(fn() => $cache->set(Arg::any(), Arg::any(), Arg::any()), never: true);
+    }
+
+    public function aChallengeExpiringThisVerySecondIsStillAlive(): void
+    {
+        $cache = Understudy::for(CacheInterface::class);
+        $ttl = Arg::captor();
+        when(fn() => $cache->has(Arg::any()))->returns(false);
+        when(fn() => $cache->set(Arg::any(), Arg::any(), $ttl->capture()))->returns(true);
+        $now = time();
+        $challenge = $this->foreignChallenge(expiresAt: $now + 30);
+
+        // the verifier's clock stands exactly on the expiry: not past it yet, the marker lives just the margin
+        $status = (new AltchaVerifier(Browser::config(), $cache, new FixedClock($now + 30)))->verify(Browser::solve($challenge));
+
+        Assert::same($status, VerificationStatus::Verified);
+        Assert::same($ttl->last(), AltchaVerifier::REPLAY_MARGIN_SECONDS);
+    }
+
+    public function aClockBehindTheSystemKeepsTheReplayProtection(): void
+    {
+        $payload = Browser::solve((new ChallengeIssuer(Browser::config()))->issue());
+        $verifier = new AltchaVerifier(Browser::config(), new MemorySimpleCache(), new FixedClock(time() - 7200));
+
+        Assert::same($verifier->verify($payload), VerificationStatus::Verified);
+        Assert::same($verifier->verify($payload), VerificationStatus::Replayed);
     }
 
     public function withoutAReplayCacheASolvedPayloadWorksRepeatedly(): void
@@ -232,7 +310,7 @@ final class AltchaVerifierTest
         $challenge = (new ChallengeIssuer(Browser::config()))->issue();
         $solution = Browser::solution($challenge);
         $broken = $solution;
-        $broken['counter'] += 1;
+        $broken['derivedKey'] = strrev($solution['derivedKey']);
 
         Assert::same($verifier->verify(Browser::encode($challenge, $broken)), VerificationStatus::InvalidSolution);
         Assert::same($verifier->verify(Browser::encode($challenge, $solution)), VerificationStatus::Replayed);
@@ -281,7 +359,7 @@ final class AltchaVerifierTest
         $challenge = (new ChallengeIssuer(Browser::config()))->issue();
         $solution = Browser::solution($challenge);
         $broken = $solution;
-        $broken['counter'] += 1;
+        $broken['derivedKey'] = strrev($solution['derivedKey']);
 
         Assert::same($verifier->verify(Browser::encode($challenge, $broken)), VerificationStatus::InvalidSolution);
         Assert::same($verifier->verify(Browser::encode($challenge, $solution)), VerificationStatus::Verified);
@@ -346,8 +424,8 @@ final class AltchaVerifierTest
         $challenge = (new ChallengeIssuer(Browser::config()))->issue();
         $solution = Browser::solution($challenge);
 
-        if (\in_array($field, ['counter', 'derivedKey'], strict: true)) {
-            $solution[$field] = \is_int($solution[$field]) ? $solution[$field] + $delta : $solution[$field] . dechex($delta % 16);
+        if ($field === 'derivedKey') {
+            $solution['derivedKey'] .= dechex($delta % 16);
         } elseif ($field === 'signature') {
             $challenge['signature'] = strrev((string) $challenge['signature']);
         } elseif ($field === 'algorithm') {
@@ -368,8 +446,25 @@ final class AltchaVerifierTest
     public static function anyTamperingOfASolvedPayloadIsRejectedGenerators(): array
     {
         return [
-            'field' => Gen::elements(['cost', 'nonce', 'salt', 'keyPrefix', 'keyLength', 'expiresAt', 'algorithm', 'signature', 'counter', 'derivedKey']),
+            'field' => Gen::elements(['cost', 'nonce', 'salt', 'keyPrefix', 'keySignature', 'keyLength', 'expiresAt', 'algorithm', 'signature', 'derivedKey']),
             'delta' => Gen::intBetween(1, 1000),
         ];
+    }
+
+    /**
+     * A challenge signed with our secret by an issuer that is not this package: no key signature, any expiry.
+     *
+     * @return array<string, mixed>
+     */
+    private function foreignChallenge(int|float|null $expiresAt): array
+    {
+        $altcha = new \AltchaOrg\Altcha\Altcha(hmacSignatureSecret: Browser::SECRET);
+
+        return $altcha->createChallenge(new \AltchaOrg\Altcha\CreateChallengeOptions(
+            algorithm: new \AltchaOrg\Altcha\Algorithm\Pbkdf2(),
+            cost: 10,
+            counter: 3,
+            expiresAt: $expiresAt,
+        ))->toArray();
     }
 }

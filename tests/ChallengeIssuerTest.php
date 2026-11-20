@@ -26,6 +26,13 @@ final class ChallengeIssuerTest
         Assert::true(\is_string($challenge['signature']) && $challenge['signature'] !== '');
     }
 
+    public function theChallengeCarriesASignatureOfItsDerivedKey(): void
+    {
+        $challenge = (new ChallengeIssuer(Browser::config()))->issue();
+
+        Assert::same(preg_match('/\A[0-9a-f]{64}\z/', (string) $challenge['parameters']['keySignature']), 1);
+    }
+
     public function withoutAClockTheExpiryIsMeasuredFromNow(): void
     {
         $before = time();

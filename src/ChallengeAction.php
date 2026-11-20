@@ -11,7 +11,7 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Serves a fresh challenge as JSON; the widget fetches it through its `challengeurl`.
+ * Serves a fresh challenge as JSON; the v3 widget fetches it through its `challenge` attribute.
  *
  * @api
  */

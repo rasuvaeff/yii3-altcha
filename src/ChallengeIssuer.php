@@ -8,9 +8,13 @@ use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\CreateChallengeOptions;
 use Psr\Clock\ClockInterface;
 use Rasuvaeff\Yii3Altcha\Internal\AlgorithmMap;
+use Rasuvaeff\Yii3Altcha\Internal\AltchaFactory;
 
 /**
- * Issues signed, expiring challenges. One of the two classes that touch the official library.
+ * Issues signed, expiring challenges. Each challenge carries a signature of the derived key, so verifying a solution
+ * later costs one HMAC instead of a key derivation.
+ *
+ * A clock other than the system one is for tests: the verifier also checks expiry against the system time.
  *
  * @api
  */
@@ -22,11 +26,11 @@ final readonly class ChallengeIssuer
         private AltchaConfig $config,
         private ?ClockInterface $clock = null,
     ) {
-        $this->altcha = new Altcha(hmacSignatureSecret: $config->secret);
+        $this->altcha = AltchaFactory::create($config);
     }
 
     /**
-     * The challenge as the widget expects it (`parameters` + `signature`).
+     * The challenge as the widget expects it (`parameters` + `signature`). Costs one key derivation.
      *
      * @return array<string, mixed>
      */

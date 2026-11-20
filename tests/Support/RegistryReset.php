@@ -17,6 +17,7 @@ final class RegistryReset
             AltchaRegistry::$factory = null;
             AltchaRegistry::$verifier = null;
             AltchaRegistry::$translator = null;
+            AltchaRegistry::$translatorFactory = null;
         }, null, AltchaRegistry::class)();
     }
 }

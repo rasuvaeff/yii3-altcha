@@ -109,6 +109,35 @@ final class ConfigWiringTest
         AltchaRegistry::verifier();
     }
 
+    public function theBootstrapLooksForTheTranslatorOnlyWhenItIsAsked(): void
+    {
+        $inner = $this->container($this->withSecret());
+        $asked = 0;
+        $container = new class ($inner, $asked) implements \Psr\Container\ContainerInterface {
+            public function __construct(private readonly \Psr\Container\ContainerInterface $inner, private int &$asked) {}
+
+            public function get(string $id): mixed
+            {
+                return $this->inner->get($id);
+            }
+
+            public function has(string $id): bool
+            {
+                $this->asked++;
+
+                return $this->inner->has($id);
+            }
+        };
+
+        foreach ($this->bootstrap() as $step) {
+            $step($container);
+        }
+
+        Assert::same($asked, 0);
+        Assert::same(AltchaRegistry::translator(), null);
+        Assert::same($asked, 1);
+    }
+
     public function anInvalidAlgorithmParamFailsOnlyWhenTheConfigIsBuilt(): void
     {
         $params = $this->withSecret();

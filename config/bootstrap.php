@@ -11,7 +11,7 @@ return [
     static function (ContainerInterface $container): void {
         AltchaRegistry::configure(
             verifier: static fn(): AltchaVerifier => $container->get(AltchaVerifier::class),
-            translator: $container->has(TranslatorInterface::class)
+            translator: static fn(): ?TranslatorInterface => $container->has(TranslatorInterface::class)
                 ? $container->get(TranslatorInterface::class)
                 : null,
         );

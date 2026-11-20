@@ -12,14 +12,14 @@ final readonly class AltchaConfig
     public const int MIN_SECRET_BYTES = 32;
 
     /**
-     * Issuing a challenge and verifying a solution each cost the server one derivation at this many iterations,
-     * on endpoints anyone can call: the cap keeps that under ~60 ms for PBKDF2/SHA-256.
+     * Issuing a challenge costs the server one key derivation at this many iterations, on an endpoint anyone can
+     * call: the cap keeps that near 60 ms for PBKDF2/SHA-256 and near 110 ms for PBKDF2/SHA-512.
      */
     public const int MAX_COST = 100_000;
 
     /**
      * @param string $secret HMAC secret signing every challenge; at least 32 bytes, from the environment
-     * @param int $cost key-derivation iterations per attempt; issuing and verifying each repeat it once, so it is capped
+     * @param int $cost key-derivation iterations per attempt; issuing a challenge repeats it once, so it is capped
      * @param int $maxCounter upper bound of the secret counter the browser has to find: the average solve takes half of it
      * @param int $ttlSeconds lifetime of a challenge and therefore of a solved payload
      */

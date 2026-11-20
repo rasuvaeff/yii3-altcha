@@ -55,6 +55,9 @@
         "yiisoft/test-support": "^3.0",
         "yiisoft/translator-message-php": "^1.1"
     },
+    "suggest": {
+        "yiisoft/translator-message-php": "For the bundled Russian translation of the rule message"
+    },
     "autoload": {
         "psr-4": {
             "Rasuvaeff\\Yii3Altcha\\": "src/"

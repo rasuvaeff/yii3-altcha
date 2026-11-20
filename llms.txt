@@ -1,0 +1,58 @@
+# yii3-altcha
+
+Self-hosted ALTCHA proof-of-work CAPTCHA for Yii3, on top of the official `altcha-org/altcha`. The server issues a signed
+challenge, the browser solves it, the server verifies locally — no outgoing request, no third-party account.
+
+Install:
+
+```
+composer require rasuvaeff/yii3-altcha
+```
+
+## Rules
+
+- PHP 8.3+, `declare(strict_types=1)`; immutable by default (`final readonly class`)
+- The official library owns all cryptography; only `ChallengeIssuer` and `AltchaVerifier` touch it
+- `secret` is mandatory, at least 32 bytes, from the environment; an unset secret fails the container
+- Challenges always expire (`ttlSeconds`); unsigned challenges never verify (fail-closed)
+- `verify()` never throws on hostile input: anything undecodable is `VerificationStatus::Malformed`; payloads over 8192 bytes are `Malformed` before decoding
+- Replay protection (default on) needs a `Psr\SimpleCache\CacheInterface` in the container; without it set `replayProtection => false`
+- `AltchaRule` handlers are built without arguments by yiisoft/validator: they read the verifier from `AltchaRegistry`, filled by `config/bootstrap.php`
+- Proof-of-work raises the cost of automation, it is not proof of a human: combine with rate limiting
+
+## API
+
+Params (`config/params.php`, key `rasuvaeff/yii3-altcha`): `secret`, `algorithm` (`PBKDF2/SHA-256` default; also `PBKDF2/SHA-384|512`, `SHA-256|384|512`),
+`cost` (5000, max 1000000), `maxCounter` (1000), `ttlSeconds` (600), `replayProtection` (true), `translation.category`.
+
+```php
+use Rasuvaeff\Yii3Altcha\{AltchaConfig, AltchaVerifier, ChallengeIssuer, VerificationStatus};
+
+$config = new AltchaConfig(secret: $env['ALTCHA_SECRET']);           // >= 32 bytes
+$challenge = (new ChallengeIssuer($config))->issue();                 // array: parameters + signature, for the widget
+$verifier = new AltchaVerifier($config, replayCache: $psr16Cache);    // cache optional
+$status = $verifier->verify($_POST['altcha'] ?? '');                  // VerificationStatus
+$status->isVerified();                                                // true only for Verified
+// other cases: Expired, InvalidSignature, InvalidSolution, Replayed, Malformed (->value is snake_case)
+```
+
+```php
+// Route (PSR-15 handler returning the challenge as uncached JSON)
+Route::get('/altcha/challenge')->action(Rasuvaeff\Yii3Altcha\ChallengeAction::class);
+
+// Form: the widget tag (load the altcha web component script yourself, pinned version)
+echo Rasuvaeff\Yii3Altcha\AltchaWidget::widget()
+    ->withChallengeUrl('/altcha/challenge')
+    ->withFieldName('altcha')   // default
+    ->render();                 // <altcha-widget challengeurl="/altcha/challenge" name="altcha"></altcha-widget>
+
+// Validation (yiisoft/validator)
+final class RegisterForm
+{
+    #[Rasuvaeff\Yii3Altcha\AltchaRule(message: 'The CAPTCHA verification failed.')]
+    public string $altcha = '';
+}
+```
+
+Algorithms are the `AltchaAlgorithm` enum (values are the protocol names). Difficulty in the browser is about
+`cost * maxCounter / 2` key-derivation iterations; tune `maxCounter` first.

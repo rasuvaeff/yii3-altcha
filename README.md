@@ -1,0 +1,198 @@
+# rasuvaeff/yii3-altcha
+
+[![Latest Stable Version](https://poser.pugx.org/rasuvaeff/yii3-altcha/v)](https://packagist.org/packages/rasuvaeff/yii3-altcha)
+[![Total Downloads](https://poser.pugx.org/rasuvaeff/yii3-altcha/downloads)](https://packagist.org/packages/rasuvaeff/yii3-altcha)
+[![Build](https://github.com/rasuvaeff/yii3-altcha/actions/workflows/build.yml/badge.svg)](https://github.com/rasuvaeff/yii3-altcha/actions/workflows/build.yml)
+[![Static analysis](https://github.com/rasuvaeff/yii3-altcha/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/rasuvaeff/yii3-altcha/actions/workflows/static-analysis.yml)
+[![Psalm level](https://img.shields.io/badge/psalm-level_1-blue.svg)](https://github.com/rasuvaeff/yii3-altcha/actions/workflows/static-analysis.yml)
+[![PHP](https://img.shields.io/packagist/dependency-v/rasuvaeff/yii3-altcha/php)](https://packagist.org/packages/rasuvaeff/yii3-altcha)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE.md)
+[Русская версия](README.ru.md)
+
+[ALTCHA](https://altcha.org) proof-of-work CAPTCHA for Yii3: the server issues a signed challenge, the browser spends CPU
+solving it, and the server verifies the answer locally. No third-party service, no outgoing request, no site key
+account — the data never leaves your server.
+
+Built on the official [`altcha-org/altcha`](https://github.com/altcha-org/altcha-lib-php) library, which owns all the
+cryptography; this package is the Yii3 wiring around it.
+
+> Using an AI coding assistant? [llms.txt](llms.txt) contains a compact API reference you can share with the model.
+
+## Requirements
+
+- PHP 8.3+
+- `altcha-org/altcha` ^2.4
+- `yiisoft/validator`, `yiisoft/widget`, `yiisoft/html`, `yiisoft/translator`
+- A PSR-16 cache (`Psr\SimpleCache\CacheInterface`) in the container — only while replay protection is on (the default)
+
+## Installation
+
+```bash
+composer require rasuvaeff/yii3-altcha
+```
+
+With `yiisoft/config` the package registers its DI definitions, params and bootstrap automatically.
+
+## Usage
+
+### Configuration
+
+Set the secret through the environment-backed params of your application; everything else has a default:
+
+```php
+// config/params.php
+return [
+    'rasuvaeff/yii3-altcha' => [
+        'secret' => $_ENV['ALTCHA_SECRET'],   // >= 32 bytes, never committed
+        'algorithm' => 'PBKDF2/SHA-256',
+        'cost' => 5000,
+        'maxCounter' => 1000,
+        'ttlSeconds' => 600,
+        'replayProtection' => true,
+    ],
+];
+```
+
+| Param | Default | Meaning |
+|---|---|---|
+| `secret` | `''` (must be set) | HMAC secret signing every challenge, at least 32 bytes. An unset secret fails the container loudly |
+| `algorithm` | `PBKDF2/SHA-256` | `PBKDF2/SHA-256\|384\|512` or `SHA-256\|384\|512` — the algorithms the browser widget solves natively |
+| `cost` | `5000` | Key-derivation iterations per attempt; verification repeats it once, so it is capped at 1 000 000 |
+| `maxCounter` | `1000` | Upper bound of the secret counter the browser searches; the average solve is half of it |
+| `ttlSeconds` | `600` | Lifetime of a challenge, hence of a solved payload |
+| `replayProtection` | `true` | Accept a solved payload only once (needs a PSR-16 cache in the container) |
+| `translation.category` | `yii3-altcha` | Translator category of the rule message |
+
+Difficulty is `cost × maxCounter / 2` iterations in the browser, on average. The defaults aim at roughly a second on a
+laptop; measure on your slowest supported device and tune `maxCounter` first.
+
+### Challenge endpoint
+
+`ChallengeAction` is a PSR-15 request handler returning a fresh challenge as uncached JSON. Put it on any route:
+
+```php
+use Rasuvaeff\Yii3Altcha\ChallengeAction;
+use Yiisoft\Router\Route;
+
+Route::get('/altcha/challenge')->action(ChallengeAction::class);
+```
+
+### Widget
+
+`AltchaWidget` renders the `<altcha-widget>` tag. The widget script itself (the `altcha` web component) is loaded by
+your application — pin a concrete version rather than `latest`:
+
+```php
+use Rasuvaeff\Yii3Altcha\AltchaWidget;
+
+echo AltchaWidget::widget()
+    ->withChallengeUrl('/altcha/challenge')
+    ->withFieldName('altcha')   // the name of the posted form field, `altcha` by default
+    ->render();
+```
+
+If the challenge URL lives on another origin, send `Access-Control-Allow-Origin` from the challenge route.
+
+### Validation
+
+`AltchaRule` plugs into `yiisoft/validator`; the value is the raw base64 string the widget posts:
+
+```php
+use Rasuvaeff\Yii3Altcha\AltchaRule;
+
+final class RegisterForm
+{
+    #[AltchaRule]
+    public string $altcha = '';
+}
+```
+
+Rule handlers are built without arguments by the default `yiisoft/validator` resolver, so the handler reads the
+verifier from `AltchaRegistry`, which the package bootstrap fills once at application start.
+
+### Verifying directly
+
+```php
+use Rasuvaeff\Yii3Altcha\AltchaVerifier;
+use Rasuvaeff\Yii3Altcha\VerificationStatus;
+
+$status = $verifier->verify($_POST['altcha'] ?? '');
+
+if ($status !== VerificationStatus::Verified) {
+    // $status->value: expired | invalid_signature | invalid_solution | replayed | malformed
+}
+```
+
+`verify()` never throws on hostile input — whatever cannot be decoded is `Malformed`.
+
+### Public API
+
+| Class | Description |
+|---|---|
+| `AltchaConfig` | Validated settings VO: secret, algorithm, cost, maxCounter, ttlSeconds |
+| `AltchaAlgorithm` | Enum of the algorithms the widget can solve |
+| `ChallengeIssuer` | Issues a signed, expiring challenge as the array the widget expects |
+| `ChallengeAction` | PSR-15 handler serving a challenge as JSON |
+| `AltchaVerifier` | Verifies a posted payload locally, optional one-time-use replay cache |
+| `VerificationStatus` | `Verified`, `Expired`, `InvalidSignature`, `InvalidSolution`, `Replayed`, `Malformed` |
+| `AltchaRule` / `AltchaRuleHandler` | `yiisoft/validator` rule |
+| `AltchaRegistry` | Static holder of the verifier and translator for the rule handler |
+| `AltchaWidget` | Renders the `<altcha-widget>` tag |
+
+## Security
+
+- **Proof-of-work is a cost, not proof of a human.** It makes bulk automation expensive, not impossible; a determined
+  bot with CPU still passes. Combine with rate limiting for anything that matters.
+- **The secret signs every challenge.** Without a signature secret nothing can verify (fail-closed). Keep it in the
+  environment, at least 32 bytes; rotating it invalidates outstanding challenges.
+- **Challenges always expire.** There is no switch to disable expiry; the replay window is `ttlSeconds`.
+- **Replay protection** (on by default) makes a solved payload single-use through a PSR-16 cache. PSR-16 has no atomic
+  add, so two simultaneous submissions of the same payload can both pass in a tiny window; use a shared cache
+  (Redis) if several workers serve the form. Switching it off makes one solve good for every submission until
+  expiry.
+- **Hostile input is bounded.** Payloads over 8 KiB are rejected before decoding; the signature is checked before any
+  key derivation, so a forged `cost` cannot burn server CPU.
+- The signed parameters — algorithm, cost, expiry — come from the challenge, not from your config at verify time;
+  tightening the config affects new challenges only.
+
+## Examples
+
+See [examples/](examples/) for runnable scripts.
+Examples are expected to execute without fatal errors and stay aligned with the
+documented public API.
+
+| Script | Shows | Needs server? |
+|---|---|---|
+| [`round-trip.php`](examples/round-trip.php) | Issue, solve as the browser would, verify; replay and garbage rejection | no |
+| [`widget.php`](examples/widget.php) | Rendering the `<altcha-widget>` tag | no |
+
+## Development
+
+No PHP/Composer on the host — run in Docker via the `composer:2` image:
+
+```bash
+docker run --rm -v "$PWD":/app -w /app composer:2 composer install
+docker run --rm -v "$PWD":/app -w /app composer:2 composer build
+docker run --rm -v "$PWD":/app -w /app composer:2 composer cs:fix
+docker run --rm -v "$PWD":/app -w /app composer:2 composer test
+docker run --rm -v "$PWD":/app -w /app composer:2 composer release-check
+```
+
+Or with Make:
+
+```bash
+make install
+make build
+make cs-fix
+make test
+make test-coverage
+make mutation
+make release-check
+```
+
+`make test-coverage` and `make mutation` bootstrap `pcov` inside the
+`composer:2` container because the base image has no coverage driver.
+
+## License
+
+[BSD-3-Clause](LICENSE.md)

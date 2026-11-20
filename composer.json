@@ -1,0 +1,120 @@
+{
+    "name": "rasuvaeff/yii3-altcha",
+    "description": "ALTCHA proof-of-work CAPTCHA for Yii3: self-hosted, no external service.",
+    "license": "BSD-3-Clause",
+    "type": "library",
+    "keywords": [
+        "yii",
+        "yii3",
+        "altcha",
+        "captcha",
+        "proof-of-work",
+        "widget",
+        "validator"
+    ],
+    "authors": [
+        {
+            "name": "Victor Razuvaev",
+            "email": "rasuvaeff@gmail.com"
+        }
+    ],
+    "homepage": "https://github.com/rasuvaeff/yii3-altcha",
+    "support": {
+        "issues": "https://github.com/rasuvaeff/yii3-altcha/issues",
+        "source": "https://github.com/rasuvaeff/yii3-altcha"
+    },
+    "require": {
+        "php": "8.3 - 8.5",
+        "altcha-org/altcha": "^2.4",
+        "psr/clock": "^1.0",
+        "psr/container": "^1.1 || ^2.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.0 || ^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/simple-cache": "^3.0",
+        "yiisoft/html": "^3.13 || ^4.0",
+        "yiisoft/translator": "^3.0",
+        "yiisoft/validator": "^2.5",
+        "yiisoft/widget": "^2.2"
+    },
+    "require-dev": {
+        "ergebnis/composer-normalize": "^2.51",
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "infection/infection": "^0.35",
+        "maglnet/composer-require-checker": "^4.17",
+        "nyholm/psr7": "^1.8",
+        "rasuvaeff/property-testing-testo": "^1.0",
+        "rasuvaeff/rector-named-literals": "^1.0",
+        "rasuvaeff/understudy-testo": "^1.0",
+        "rector/rector": "^2.4",
+        "roave/backward-compatibility-check": "^8.0",
+        "testo/bridge-infection": "^0.1.6",
+        "testo/testo": "^0.10.25",
+        "vimeo/psalm": "^7.0",
+        "yiisoft/di": "^1.4",
+        "yiisoft/test-support": "^3.0",
+        "yiisoft/translator-message-php": "^1.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Rasuvaeff\\Yii3Altcha\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Rasuvaeff\\Yii3Altcha\\Benchmarks\\": "benchmarks/",
+            "Rasuvaeff\\Yii3Altcha\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "ergebnis/composer-normalize": true,
+            "infection/extension-installer": true
+        },
+        "platform": {
+            "ext-bcmath": "1.0.0",
+            "ext-intl": "1.0.0"
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "config-plugin": {
+            "bootstrap": "bootstrap.php",
+            "di": "di.php",
+            "params": "params.php"
+        },
+        "config-plugin-options": {
+            "source-directory": "config"
+        }
+    },
+    "scripts": {
+        "bc-check": "roave-backward-compatibility-check",
+        "bench": "testo --suite=Benchmarks -vv",
+        "build": [
+            "@composer validate --strict",
+            "@composer normalize --dry-run",
+            "@require-checker",
+            "@cs",
+            "@psalm",
+            "@test"
+        ],
+        "cs": "php-cs-fixer fix --dry-run --diff --config=.php-cs-fixer.php",
+        "cs:fix": "php-cs-fixer fix --diff --config=.php-cs-fixer.php",
+        "mutation": [
+            "Composer\\Config::disableProcessTimeout",
+            "infection --threads=max --with-uncovered"
+        ],
+        "psalm": "psalm --no-cache",
+        "rector": "rector process --dry-run",
+        "rector:fix": "rector process",
+        "release-check": [
+            "@build",
+            "@rector",
+            "@bc-check"
+        ],
+        "require-checker": "composer-require-checker check composer.json",
+        "test": "testo --suite=Unit",
+        "test:coverage": "testo --suite=Unit --coverage --coverage-clover=build/coverage.xml",
+        "test:coverage:ci": "testo --suite=Unit --coverage-clover=build/coverage.xml"
+    }
+}

@@ -12,7 +12,7 @@ use function Rasuvaeff\Understudy\when;
 /**
  * A PSR-20 clock standing at one moment: an Understudy double, not a class of our own.
  */
-final class Clock
+final readonly class Clock
 {
     public static function at(int $timestamp): ClockInterface
     {

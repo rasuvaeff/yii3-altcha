@@ -8,7 +8,7 @@ namespace Rasuvaeff\Yii3Altcha\Tests\Support;
  * Reads a rendered `<altcha-widget>` tag as a map of its attributes: yiisoft/html 3 and 4 put the same
  * attributes in a different order, and the order means nothing to the browser.
  */
-final class Tag
+final readonly class Tag
 {
     /**
      * @return array<string, string|true> attribute name to its raw (still escaped) value, `true` for a bare one, sorted by name
